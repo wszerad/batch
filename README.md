@@ -1,2 +1,0 @@
-# batch
-Batch job collector
