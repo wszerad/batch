@@ -17,7 +17,8 @@ describe('case circular', () => {
 					subcategories: await jobs(input.subcategories),
 					image: await imageBatch.job(input.name)
 				}
-			}
+			},
+			imageBatch
 		)
 		
 		const names = await getMainCategoryNames()

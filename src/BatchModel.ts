@@ -2,7 +2,7 @@ export type Processor<I, O> = (jobs: I[]) => Promise<O[]>
 export type PostProcessor<I, O, P> = (input: P, recurrent: BatchModel<I, O, P>) => Promise<O>
 
 export class BatchModel<I, O, P = any> {
-	name: string = ''
+	private dependencies: (BatchModel<any, any>[] | BatchModel<any, any>)[]
 	private process: Promise<O[]> = Promise.resolve([])
 	private resolve: (output: O[]) => void = () => {}
 	private reject: (error: Error) => void = () => {}
@@ -10,8 +10,10 @@ export class BatchModel<I, O, P = any> {
 
 	constructor(
 		private batchProcess: Processor<I, P>,
-		private postProcess: PostProcessor<I, O, P> = (item) => item as Promise<O>
+		private postProcess: PostProcessor<I, O, P> = (item) => item as Promise<O>,
+		...dependencies: (BatchModel<any, any>[] | BatchModel<any, any>)[]
 	) {
+		this.dependencies = dependencies || []
 	}
 
 	private init() {
@@ -45,10 +47,12 @@ export class BatchModel<I, O, P = any> {
 		return this.process.then(data => data.slice(startIndex, endIndex))
 	}
 
-	async release(dependencies?: BatchModel<any, any>[]): Promise<void> {
+	async release(...dependencies: (BatchModel<any, any>[] | BatchModel<any, any>)[]): Promise<void> {
 		const items = this.input.splice(0, this.input.length)
 		const res = this.resolve
 		const rej = this.reject
+
+		dependencies = dependencies || this.dependencies
 
 		await this.batchProcess(items)
 			.then(async data => {
@@ -56,12 +60,12 @@ export class BatchModel<I, O, P = any> {
 					data.map(item => this.postProcess(item, this))
 				)
 
-				await Promise.all(
-					dependencies?.map(dep => dep.release()) || []
-				)
-
 				if (this.input.length) {
-					await this.release(dependencies)
+					await this.release(...dependencies)
+				}
+
+				for (let i = 0; i < dependencies.length; i++) {
+					await Promise.all([].concat(dependencies[i]).map(dep => dep.release()) || [])
 				}
 
 				res(await results)
